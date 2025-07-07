@@ -1,144 +1,119 @@
-# flutter_pdfview
-
-Native PDF View for iOS and Android
-
-<p align="center">
-<a  href="https://www.buymeacoffee.com/endigo" target="_blank"><img src="https://cdn.buymeacoffee.com/buttons/lato-blue.png" alt="Buy Me A Coffee" height=60 ></a>
-</p>
-
-
-# Use this package as a library
-
-## 1. Depend on it
-
-Add this to your package's pubspec.yaml file:
-
-```
-dependencies:
-  flutter_pdfview: 1.3.2
-```
-
-### 2. Install it
-
-You can install packages from the command line:
-
-with Flutter:
-
-```
-$ flutter packages get
-```
-
-Alternatively, your editor might support pub get or `flutter packages get`. Check the docs for your editor to learn more.
-
-### 3. Import it
-
-Now in your Dart code, you can use:
-
-```
+Flutter PDFView Plus (نسخه ۲.۰)<p align="center"><a href="https://pub.dev/packages/flutter_pdfview"><img src="https://www.google.com/search?q=https://img.shields.io/pub/v/flutter_pdfview.svg" alt="Pub Version"></a><a href="https://github.com/endigo/flutter_pdfview"><img src="https://www.google.com/search?q=https://img.shields.io/github/stars/endigo/flutter_pdfview.svg%3Fstyle%3Dsocial" alt="GitHub Stars"></a><br><img src="https://www.google.com/search?q=https://img.shields.io/badge/platform-android%2520%257C%2520ios-blue.svg" alt="Platform"><img src="https://www.google.com/search?q=https://img.shields.io/badge/license-MIT-green.svg" alt="License"></p>یک پلاگین قدرتمند فلاتر برای نمایش اسناد PDF در اندروید و iOS، همراه با قابلیت‌های پیشرفته برای مدیریت دقیق اسکرول و استخراج محتوا. این پروژه یک نسخه بهبودیافته بر پایه flutter_pdfview اصلی است.✨ قابلیت‌های کلیدی نسخه Plusاین نسخه علاوه بر تمام ویژگی‌های استاندارد، قابلیت‌های منحصر به فرد زیر را ارائه می‌دهد:💾 مدیریت دقیق موقعیت اسکرول:امکان ذخیره و بازیابی موقعیت دقیق (x, y) اسکرول کاربر.ایده‌آل برای قابلیت "ادامه مطالعه" و جلوگیری از گم کردن صفحه.فراهم کردن زیرساخت برای اسکرول خودکار.🖼️ استخراج هوشمند تصاویر:استخراج تمام تصاویر موجود در سند PDF با حفظ ترتیب بصری و فرمت اصلی (JPEG, PNG, GIF, ...).امکان ایجاد گالری تصاویر از محتوای PDF به سادگی.🔧 نصببرای استفاده از این پلاگین، آن را به فایل pubspec.yaml پروژه خود اضافه کنید:dependencies:
+  flutter_pdfview_plus: ^2.0.0 # نام پیشنهادی برای نسخه بهبودیافته شما
+سپس دستور زیر را اجرا کنید:flutter pub getتنظیمات اختصاصی اندرویددر فایل android/app/build.gradle (یا android/build.gradle برای پلاگین)، وابستگی زیر را برای فعال‌سازی قابلیت استخراج تصویر اضافه کنید:dependencies {
+    // ... سایر وابستگی‌ها
+    implementation 'com.tom-roush:pdfbox-android:2.0.25.0'
+}
+🚀 نحوه استفادهنمایش ساده یک PDFبرای نمایش یک فایل PDF از حافظه دستگاه یا از داده‌های باینری (Uint8List) استفاده کنید.import 'package:flutter/material.dart';
 import 'package:flutter_pdfview/flutter_pdfview.dart';
-```
 
-## Options
+class PDFScreen extends StatefulWidget {
+  final String? path;
 
-| Name                  | Android | iOS |      Default      |
-|:----------------------| :-----: | :-: |:-----------------:|
-| defaultPage           |   ✅    | ✅  |        `0`        |
-| onViewCreated         |   ✅    | ✅  |      `null`       |
-| onRender              |   ✅    | ✅  |      `null`       |
-| onPageChanged         |   ✅    | ✅  |      `null`       |
-| onError               |   ✅    | ✅  |      `null`       |
-| onPageError           |   ✅    | ❌  |      `null`       |
-| onLinkHandle          |   ✅    | ✅  |      `null`       |
-| gestureRecognizers    |   ✅    | ✅  |      `null`       |
-| filePath              |   ✅    | ✅  |                   |
-| pdfData               |   ✅    | ✅  |                   |
-| fitPolicy             |   ✅    | ❌  | `FitPolicy.WIDTH` |
-| enableSwipe           |   ✅    | ✅  |      `true`       |
-| swipeHorizontal       |   ✅    | ✅  |      `false`      |
-| password              |   ✅    | ✅  |      `null`       |
-| nightMode             |   ✅    | ❌  |      `false`      |
-| password              |   ✅    | ✅  |      `null`       |
-| autoSpacing           |   ✅    | ✅  |      `true`       |
-| pageFling             |   ✅    | ✅  |      `true`       |
-| pageSnap              |   ✅    | ❌  |      `true`       |
-| preventLinkNavigation |   ✅    | ✅  |      `false`      |
-| backgroundColor       |   ✅    | ✅  |      `null`       |
+  const PDFScreen({Key? key, this.path}) : super(key: key);
 
-## Controller Options
+  @override
+  _PDFScreenState createState() => _PDFScreenState();
+}
 
-| Name           |     Description      | Parameters |     Return     |
-| :------------- | :------------------: | :--------: | :------------: |
-| getPageCount   | Get total page count |     -      | `Future<int>`  |
-| getCurrentPage |   Get current page   |     -      | `Future<int>`  |
-| setPage        |    Go to/Set page    | `int page` | `Future<bool>` |
+class _PDFScreenState extends State<PDFScreen> {
+  late PDFViewController _pdfViewController;
+  int? pages = 0;
+  int? currentPage = 0;
 
-## Example
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text("نمایش سند")),
+      body: PDFView(
+        filePath: widget.path,
+        enableSwipe: true,
+        swipeHorizontal: false,
+        autoSpacing: false,
+        pageFling: true,
+        onRender: (_pages) {
+          setState(() {
+            pages = _pages;
+          });
+        },
+        onError: (error) {
+          print(error.toString());
+        },
+        onPageError: (page, error) {
+          print('$page: ${error.toString()}');
+        },
+        onViewCreated: (PDFViewController pdfViewController) {
+          _pdfViewController = pdfViewController;
+        },
+        onPageChanged: (int? page, int? total) {
+          setState(() {
+            currentPage = page;
+          });
+        },
+      ),
+    );
+  }
+}
+استفاده از قابلیت‌های پیشرفته۱. مدیریت موقعیت اسکرولشما می‌توانید موقعیت دقیق اسکرول را ذخیره کرده و بعداً بازیابی کنید.// ذخیره موقعیت فعلی
+Future<void> _savePosition() async {
+  final position = await _pdfViewController.getPosition();
+  if (position != null) {
+    // موقعیت x و y را در SharedPreferences یا دیتابیس ذخیره کنید
+    print("موقعیت ذخیره شد: X=${position['x']}, Y=${position['y']}");
+  }
+}
 
-```dart
+// بازیابی و پرش به موقعیت ذخیره شده
+Future<void> _restorePosition() async {
+  // موقعیت را از محل ذخیره‌سازی بخوانید
+  final double savedX = 120.5;
+  final double savedY = 2500.0;
+  await _pdfViewController.setPosition(savedX, savedY);
+  print("موقعیت بازیابی شد.");
+}
+
+// دریافت گزارش زنده از تغییرات اسکرول
 PDFView(
-  filePath: path,
-  enableSwipe: true,
-  swipeHorizontal: true,
-  autoSpacing: false,
-  pageFling: false,
-  backgroundColor: Colors.grey,
-  onRender: (_pages) {
+  // ...
+  onScroll: (x, y) {
+    print("موقعیت جدید اسکرول: X=$x, Y=$y");
+  },
+  // ...
+)
+۲. استخراج و نمایش تصاویربه سادگی تمام تصاویر یک سند را استخراج کرده و در یک گالری نمایش دهید.// لیستی برای نگهداری تصاویر استخراج شده
+List<PDFImage> extractedImages = [];
+
+// فراخوانی متد برای استخراج
+Future<void> _extractAllImages() async {
+  final images = await _pdfViewController.extractImages();
+  if (images != null) {
     setState(() {
-      pages = _pages;
-      isReady = true;
+      extractedImages = images;
     });
-  },
-  onError: (error) {
-    print(error.toString());
-  },
-  onPageError: (page, error) {
-    print('$page: ${error.toString()}');
-  },
-  onViewCreated: (PDFViewController pdfViewController) {
-    _controller.complete(pdfViewController);
-  },
-  onPageChanged: (int page, int total) {
-    print('page change: $page/$total');
-  },
-),
-```
+    print("${extractedImages.length} تصویر با موفقیت استخراج شد.");
+  }
+}
 
-# Dependencies
-
-### Android
-
-[AndroidPdfViewer](https://github.com/barteksc/AndroidPdfViewer)
-
-### iOS (only support> 11.0)
-
-[PDFKit](https://developer.apple.com/documentation/pdfkit)
-
-# Future plans
-
-- Replace barteksc/AndroidPdfViewer with MuPDF or Android Native PDF Renderer.
-- Improve documentation
-- Support other platforms such as MacOS, Windows, Linux and Web
-- Add search functionality
-- Improve performance on zooming, page changing
-- Improve image quality
-- Write more test
-
-# Support
-
-<p align="center">
-<a  href="https://www.buymeacoffee.com/endigo" target="_blank"><img src="https://cdn.buymeacoffee.com/buttons/lato-blue.png" alt="Buy Me A Coffee" height=60 ></a>
-</p>
-
-<p align="center">
-    <a href="https://www.paypal.com/cgi-bin/webscr?cmd=_s-xclick&hosted_button_id=98DC9WJ8782WW&source=url" target="_blank">
-   <img height=60 src="https://www.paypalobjects.com/en_US/i/btn/btn_donateCC_LG.gif" border="0" name="submit" title="PayPal - The safer, easier way to pay online!" alt="Donate with PayPal button" >
-    </a>
-</p>
-
-## Star History
-
-[![Star History Chart](https://api.star-history.com/svg?repos=endigo/flutter_pdfview&type=Date)](https://star-history.com/#endigo/flutter_pdfview&Date)
-
-### Developer
-
-- [endigo](https://github.com/endigo)
+// نمایش تصاویر در یک ListView
+Widget buildImageGallery() {
+  return ListView.builder(
+    itemCount: extractedImages.length,
+    itemBuilder: (context, index) {
+      final image = extractedImages[index];
+      return Card(
+        child: Column(
+          children: [
+            // نمایش تصویر با استفاده از متد کمکی bytes
+            Image.memory(image.bytes),
+            Padding(
+              padding: const EdgeInsets.all(8.0),
+              // نمایش فرمت اصلی تصویر
+              child: Text("فرمت: ${image.format}"),
+            ),
+          ],
+        ),
+      );
+    },
+  );
+}
+📚 راهنمای APIپارامترهای ویجت PDFViewپارامترنوعتوضیحاتfilePathString?مسیر فایل PDF در حافظه دستگاه.pdfDataUint8List?داده‌های باینری فایل PDF.onViewCreatedPDFViewCreatedCallback?پس از ساخته شدن ویجت فراخوانی می‌شود و کنترلر را برمی‌گرداند.onRenderRenderCallback?پس از رندر شدن اولیه، تعداد کل صفحات را برمی‌گرداند.onPageChangedPageChangedCallback?با تغییر صفحه، شماره صفحه فعلی و کل صفحات را برمی‌گرداند.onScrollScrollChangedCallback?(جدید) با هر تغییر اسکرول، موقعیت x و y را گزارش می‌دهد.onErrorErrorCallback?در صورت بروز خطای کلی فراخوانی می‌شود.onPageErrorPageErrorCallback?در صورت بروز خطا در رندر یک صفحه خاص فراخوانی می‌شود.onLinkHandlerLinkHandlerCallback?هنگام کلیک روی یک لینک (در صورت فعال بودن preventLinkNavigation) فراخوانی می‌شود.enableSwipeboolفعال/غیرفعال کردن تغییر صفحه با سوایپ. (پیش‌فرض: true)swipeHorizontalboolفعال کردن سوایپ افقی. (پیش‌فرض: false)passwordString?رمز عبور برای فایل‌های PDF محافظت‌شده.nightModeboolفعال کردن حالت شب. (پیش‌فرض: false)fitPolicyFitPolicyنحوه فیت شدن صفحات در صفحه نمایش. (پیش‌فرض: FitPolicy.WIDTH)preventLinkNavigationboolجلوگیری از باز شدن خودکار لینک‌ها. (پیش‌فرض: false)backgroundColorColor?تنظیم رنگ پس‌زمینه نمایشگر.متدهای PDFViewControllerمتدخروجیتوضیحاتgetPageCountFuture<int?>تعداد کل صفحات PDF را برمی‌گرداند.getCurrentPageFuture<int?>شماره صفحه فعلی (شروع از ۰) را برمی‌گرداند.setPageFuture<bool?>به صفحه مشخص‌شده پرش می‌کند.getPositionFuture<Map?>(جدید) موقعیت دقیق اسکرول (x, y) را برمی‌گرداند.setPositionFuture<bool?>(جدید) نمایشگر را به موقعیت اسکرول (x, y) مشخص‌شده منتقل می‌کند.extractImagesFuture<List<PDFImage>?>(جدید) تمام تصاویر را به ترتیب و با فرمت اصلی استخراج می‌کند.🤝 مشارکتاز مشارکت شما در این پروژه استقبال می‌کنیم. لطفاً برای ارسال Pull Request یا ثبت Issue از طریق صفحه گیت‌هاب اقدام کنید.📜 مجوزاین پروژه تحت مجوز MIT منتشر شده است.
