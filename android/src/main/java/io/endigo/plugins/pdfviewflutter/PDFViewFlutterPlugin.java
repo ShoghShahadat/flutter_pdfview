@@ -9,6 +9,7 @@ import android.util.Base64;
 import androidx.annotation.NonNull;
 
 import com.tom_roush.pdfbox.pdmodel.PDDocument;
+import com.tom_roush.pdfbox.rendering.ImageType; // <-- وارد کردن کلاس صحیح
 import com.tom_roush.pdfbox.rendering.PDFRenderer;
 
 import java.io.ByteArrayOutputStream;
@@ -98,11 +99,16 @@ public class PDFViewFlutterPlugin implements FlutterPlugin, MethodCallHandler {
                 }
 
                 PDFRenderer renderer = new PDFRenderer(document);
-                Bitmap bitmap = renderer.renderImage(page, 1, Bitmap.Config.ARGB_8888); // scale = 1
+                // خط اصلاح شده: استفاده از ImageType.RGB به جای Bitmap.Config
+                Bitmap bitmap = renderer.renderImage(page, 1, ImageType.RGB); 
 
                 ByteArrayOutputStream stream = new ByteArrayOutputStream();
                 bitmap.compress(Bitmap.CompressFormat.PNG, quality, stream);
                 byte[] byteArray = stream.toByteArray();
+                
+                int width = bitmap.getWidth();
+                int height = bitmap.getHeight();
+
                 bitmap.recycle(); // آزاد کردن حافظه
                 document.close();
 
@@ -110,8 +116,8 @@ public class PDFViewFlutterPlugin implements FlutterPlugin, MethodCallHandler {
 
                 Map<String, Object> imageData = new HashMap<>();
                 imageData.put("data", base64);
-                imageData.put("width", bitmap.getWidth());
-                imageData.put("height", bitmap.getHeight());
+                imageData.put("width", width);
+                imageData.put("height", height);
 
                 handler.post(() -> result.success(imageData));
             } catch (IOException e) {
