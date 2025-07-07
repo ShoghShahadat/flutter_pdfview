@@ -29,11 +29,13 @@
 
 ## 🔧 نصب
 
-برای استفاده از این پلاگین، آن را به فایل `pubspec.yaml` پروژه خود اضافه کنید:
+برای استفاده از این پلاگین، آن را به صورت محلی در پروژه خود قرار دهید (طبق راهنمای مراحل قبل) و وابستگی آن را در `pubspec.yaml` بازنویسی کنید.
 
 ```yaml
-dependencies:
-  flutter_pdfview_plus: ^2.0.0 # نام پیشنهادی برای نسخه بهبودیافته شما
+# pubspec.yaml
+dependency_overrides:
+  flutter_pdfview:
+    path: packages/flutter_pdfview # مسیر پلاگین محلی شما
 ```
 
 سپس دستور زیر را اجرا کنید:
@@ -41,14 +43,7 @@ dependencies:
 
 ### تنظیمات اختصاصی اندروید
 
-در فایل `android/app/build.gradle` (یا `android/build.gradle` برای پلاگین)، وابستگی زیر را برای فعال‌سازی قابلیت استخراج تصویر اضافه کنید:
-
-```groovy
-dependencies {
-    // ... سایر وابستگی‌ها
-    implementation 'com.tom-roush:pdfbox-android:2.0.25.0'
-}
-```
+پلاگین اصلاح‌شده ما به طور خودکار تمام تنظیمات لازم (وابستگی `pdfbox` و قوانین `R8`) را مدیریت می‌کند و **نیازی به تنظیمات دستی اضافی نیست.**
 
 ---
 
@@ -72,7 +67,7 @@ class PDFScreen extends StatefulWidget {
 }
 
 class _PDFScreenState extends State<PDFScreen> {
-  late PDFViewController _pdfViewController;
+  final Completer<PDFViewController> _controller = Completer<PDFViewController>();
   int? pages = 0;
   int? currentPage = 0;
 
@@ -98,7 +93,7 @@ class _PDFScreenState extends State<PDFScreen> {
           print('$page: ${error.toString()}');
         },
         onViewCreated: (PDFViewController pdfViewController) {
-          _pdfViewController = pdfViewController;
+          _controller.complete(pdfViewController);
         },
         onPageChanged: (int? page, int? total) {
           setState(() {
@@ -120,7 +115,8 @@ class _PDFScreenState extends State<PDFScreen> {
 ```dart
 // ذخیره موقعیت فعلی
 Future<void> _savePosition() async {
-  final position = await _pdfViewController.getPosition();
+  final PDFViewController controller = await _controller.future;
+  final Map<String, double>? position = await controller.getPosition();
   if (position != null) {
     // موقعیت x و y را در SharedPreferences یا دیتابیس ذخیره کنید
     print("موقعیت ذخیره شد: X=${position['x']}, Y=${position['y']}");
@@ -132,19 +128,13 @@ Future<void> _restorePosition() async {
   // موقعیت را از محل ذخیره‌سازی بخوانید
   final double savedX = 120.5;
   final double savedY = 2500.0;
-  await _pdfViewController.setPosition(savedX, savedY);
+  
+  final PDFViewController controller = await _controller.future;
+  await controller.setPosition(savedX, savedY);
   print("موقعیت بازیابی شد.");
 }
-
-// دریافت گزارش زنده از تغییرات اسکرول
-PDFView(
-  // ...
-  onScroll: (x, y) {
-    print("موقعیت جدید اسکرول: X=$x, Y=$y");
-  },
-  // ...
-)
 ```
+**نکته:** برای دریافت گزارش زنده از تغییرات اسکرول (که در کتابخانه نیتیو حذف شده)، می‌توانید از یک `Timer.periodic` برای فراخوانی متد `getPosition` در فواصل زمانی کوتاه استفاده کنید.
 
 #### ۲. استخراج و نمایش تصاویر
 
@@ -156,7 +146,8 @@ List<PDFImage> extractedImages = [];
 
 // فراخوانی متد برای استخراج
 Future<void> _extractAllImages() async {
-  final images = await _pdfViewController.extractImages();
+  final PDFViewController controller = await _controller.future;
+  final images = await controller.extractImages();
   if (images != null) {
     setState(() {
       extractedImages = images;
@@ -172,6 +163,7 @@ Widget buildImageGallery() {
     itemBuilder: (context, index) {
       final image = extractedImages[index];
       return Card(
+        margin: const EdgeInsets.all(8.0),
         child: Column(
           children: [
             // نمایش تصویر با استفاده از متد کمکی bytes
@@ -195,35 +187,34 @@ Widget buildImageGallery() {
 
 ### پارامترهای ویجت `PDFView`
 
-| پارامتر                | نوع                          | توضیحات                                                                 |
-| ----------------------- | ---------------------------- | ------------------------------------------------------------------------ |
-| `filePath`              | `String?`                    | مسیر فایل PDF در حافظه دستگاه.                                          |
-| `pdfData`               | `Uint8List?`                 | داده‌های باینری فایل PDF.                                                |
-| `onViewCreated`         | `PDFViewCreatedCallback?`    | پس از ساخته شدن ویجت فراخوانی می‌شود و کنترلر را برمی‌گرداند.             |
-| `onRender`              | `RenderCallback?`            | پس از رندر شدن اولیه، تعداد کل صفحات را برمی‌گرداند.                      |
-| `onPageChanged`         | `PageChangedCallback?`       | با تغییر صفحه، شماره صفحه فعلی و کل صفحات را برمی‌گرداند.                 |
-| `onScroll`              | `ScrollChangedCallback?`     | **(جدید)** با هر تغییر اسکرول، موقعیت x و y را گزارش می‌دهد.             |
-| `onError`               | `ErrorCallback?`             | در صورت بروز خطای کلی فراخوانی می‌شود.                                   |
-| `onPageError`           | `PageErrorCallback?`         | در صورت بروز خطا در رندر یک صفحه خاص فراخوانی می‌شود.                    |
-| `onLinkHandler`         | `LinkHandlerCallback?`       | هنگام کلیک روی یک لینک (در صورت فعال بودن `preventLinkNavigation`) فراخوانی می‌شود. |
-| `enableSwipe`           | `bool`                       | فعال/غیرفعال کردن تغییر صفحه با سوایپ. (پیش‌فرض: `true`)                |
-| `swipeHorizontal`       | `bool`                       | فعال کردن سوایپ افقی. (پیش‌فرض: `false`)                                |
-| `password`              | `String?`                    | رمز عبور برای فایل‌های PDF محافظت‌شده.                                    |
-| `nightMode`             | `bool`                       | فعال کردن حالت شب. (پیش‌فرض: `false`)                                  |
-| `fitPolicy`             | `FitPolicy`                  | نحوه فیت شدن صفحات در صفحه نمایش. (پیش‌فرض: `FitPolicy.WIDTH`)         |
-| `preventLinkNavigation` | `bool`                       | جلوگیری از باز شدن خودکار لینک‌ها. (پیش‌فرض: `false`)                   |
-| `backgroundColor`       | `Color?`                     | تنظیم رنگ پس‌زمینه نمایشگر.                                              |
+| پارامتر                | نوع                       | توضیحات                                                                 |
+| ----------------------- | -------------------------- | ------------------------------------------------------------------------ |
+| `filePath`              | `String?`                  | مسیر فایل PDF در حافظه دستگاه.                                           |
+| `pdfData`               | `Uint8List?`               | داده‌های باینری فایل PDF.                                                 |
+| `onViewCreated`         | `PDFViewCreatedCallback?`  | پس از ساخته شدن ویجت فراخوانی می‌شود و کنترلر را برمی‌گرداند.              |
+| `onRender`              | `RenderCallback?`          | پس از رندر شدن اولیه، تعداد کل صفحات را برمی‌گرداند.                      |
+| `onPageChanged`         | `PageChangedCallback?`     | با تغییر صفحه، شماره صفحه فعلی و کل صفحات را برمی‌گرداند.                  |
+| `onError`               | `ErrorCallback?`           | در صورت بروز خطای کلی فراخوانی می‌شود.                                   |
+| `onPageError`           | `PageErrorCallback?`       | در صورت بروز خطا در رندر یک صفحه خاص فراخوانی می‌شود.                     |
+| `onLinkHandler`         | `LinkHandlerCallback?`     | هنگام کلیک روی یک لینک (در صورت فعال بودن `preventLinkNavigation`) فراخوانی می‌شود. |
+| `enableSwipe`           | `bool`                     | فعال/غیرفعال کردن تغییر صفحه با سوایپ. (پیش‌فرض: `true`)                  |
+| `swipeHorizontal`       | `bool`                     | فعال کردن سوایپ افقی. (پیش‌فرض: `false`)                                 |
+| `password`              | `String?`                  | رمز عبور برای فایل‌های PDF محافظت‌شده.                                    |
+| `nightMode`             | `bool`                     | فعال کردن حالت شب. (پیش‌فرض: `false`)                                   |
+| `fitPolicy`             | `FitPolicy`                | نحوه فیت شدن صفحات در صفحه نمایش. (پیش‌فرض: `FitPolicy.WIDTH`)           |
+| `preventLinkNavigation` | `bool`                     | جلوگیری از باز شدن خودکار لینک‌ها. (پیش‌فرض: `false`)                     |
+| `backgroundColor`       | `Color?`                   | تنظیم رنگ پس‌زمینه نمایشگر.                                              |
 
 ### متدهای `PDFViewController`
 
-| متد             | خروجی                    | توضیحات                                                                |
-| --------------- | ------------------------ | ---------------------------------------------------------------------- |
-| `getPageCount`  | `Future<int?>`           | تعداد کل صفحات PDF را برمی‌گرداند.                                     |
-| `getCurrentPage`| `Future<int?>`           | شماره صفحه فعلی (شروع از ۰) را برمی‌گرداند.                            |
-| `setPage`       | `Future<bool?>`          | به صفحه مشخص‌شده پرش می‌کند.                                           |
-| `getPosition`   | `Future<Map?>`           | **(جدید)** موقعیت دقیق اسکرول (x, y) را برمی‌گرداند.                  |
-| `setPosition`   | `Future<bool?>`          | **(جدید)** نمایشگر را به موقعیت اسکرول (x, y) مشخص‌شده منتقل می‌کند.     |
-| `extractImages` | `Future<List<PDFImage>?>`| **(جدید)** تمام تصاویر را به ترتیب و با فرمت اصلی استخراج می‌کند.       |
+| متد             | خروجی                          | توضیحات                                                                     |
+| --------------- | ------------------------------ | -------------------------------------------------------------------------- |
+| `getPageCount`  | `Future<int?>`                 | تعداد کل صفحات PDF را برمی‌گرداند.                                          |
+| `getCurrentPage`| `Future<int?>`                 | شماره صفحه فعلی (شروع از ۰) را برمی‌گرداند.                                  |
+| `setPage`       | `Future<bool?>`                | به صفحه مشخص‌شده پرش می‌کند.                                                 |
+| `getPosition`   | `Future<Map<String, double>?>` | **(جدید)** موقعیت دقیق اسکرول (x, y) را برمی‌گرداند.                         |
+| `setPosition`   | `Future<bool?>`                | **(جدید)** نمایشگر را به موقعیت اسکرول (x, y) مشخص‌شده منتقل می‌کند.         |
+| `extractImages` | `Future<List<PDFImage>?>`      | **(جدید)** تمام تصاویر را به ترتیب و با فرمت اصلی استخراج می‌کند.           |
 
 ---
 
