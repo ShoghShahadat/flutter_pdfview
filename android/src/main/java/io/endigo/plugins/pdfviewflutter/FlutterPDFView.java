@@ -13,7 +13,11 @@ import com.github.barteksc.pdfviewer.listener.OnErrorListener;
 import com.github.barteksc.pdfviewer.listener.OnPageChangeListener;
 import com.github.barteksc.pdfviewer.listener.OnPageErrorListener;
 import com.github.barteksc.pdfviewer.listener.OnRenderListener;
+import com.github.barteksc.pdfviewer.listener.OnScrollListener;
 import com.github.barteksc.pdfviewer.util.FitPolicy;
+
+// --- وارد کردن تمام پکیج‌های لازم برای PDFBox ---
+import com.tom_roush.pdfbox.android.PDFBoxResourceLoader;
 import com.tom_roush.pdfbox.contentstream.PDFStreamEngine;
 import com.tom_roush.pdfbox.contentstream.operator.Operator;
 import com.tom_roush.pdfbox.cos.COSBase;
@@ -21,9 +25,10 @@ import com.tom_roush.pdfbox.cos.COSName;
 import com.tom_roush.pdfbox.io.IOUtils;
 import com.tom_roush.pdfbox.pdmodel.PDDocument;
 import com.tom_roush.pdfbox.pdmodel.PDPage;
+import com.tom_roush.pdfbox.pdmodel.PDResources;
 import com.tom_roush.pdfbox.pdmodel.graphics.PDXObject;
 import com.tom_roush.pdfbox.pdmodel.graphics.image.PDImageXObject;
-import com.tom_roush.pdfbox.util.PDFBoxResourceLoader;
+
 
 import java.io.File;
 import java.io.IOException;
@@ -115,38 +120,14 @@ public class FlutterPDFView implements PlatformView, MethodCallHandler {
                         args.put("pages", pages);
                         methodChannel.invokeMethod("onRender", args);
                     })
-                    .onScrollHandle(new com.github.barteksc.pdfviewer.scroll.ScrollHandle() {
+                    // --- اصلاح شد: استفاده از OnScrollListener به جای ScrollHandle ---
+                    .onScroll(new OnScrollListener() {
                         @Override
-                        public void setScroll(float position) {}
-
-                        @Override
-                        public void setupLayout(PDFView pdfView) {}
-
-                        @Override
-                        public void destroyLayout() {}
-
-                        @Override
-                        public void setPageNum(int pageNum) {}
-
-                        @Override
-                        public boolean isVisible() {
-                            return false;
-                        }
-
-                        @Override
-                        public void hideDelayed() {}
-
-                        @Override
-                        public void show() {}
-
-                        @Override
-                        public void hide() {}
-                        
-                        @Override
-                        public void onScroll(float x, float y){
+                        public void onScroll(float position) {
                              Map<String, Object> args = new HashMap<>();
-                             args.put("x", (double) x);
-                             args.put("y", (double) y);
+                             // این کتابخانه فقط موقعیت کلی را می‌دهد، ما موقعیت x و y را از خود ویو می‌خوانیم
+                             args.put("x", (double) pdfView.getCurrentXOffset());
+                             args.put("y", (double) pdfView.getCurrentYOffset());
                              methodChannel.invokeMethod("onScroll", args);
                         }
                     })
@@ -178,7 +159,7 @@ public class FlutterPDFView implements PlatformView, MethodCallHandler {
                 setPosition(methodCall, result);
                 break;
             case "extractImages":
-                extractImagesInOrder(result); // استفاده از متد جدید و دقیق
+                extractImagesInOrder(result);
                 break;
             case "updateSettings":
                 updateSettings(methodCall, result);
@@ -189,7 +170,6 @@ public class FlutterPDFView implements PlatformView, MethodCallHandler {
         }
     }
 
-    // ... (متدهای دیگر بدون تغییر باقی می‌مانند)
     void getPageCount(Result result) {
         result.success(pdfView.getPageCount());
     }
@@ -222,15 +202,11 @@ public class FlutterPDFView implements PlatformView, MethodCallHandler {
         result.success(true);
     }
     
-    /**
-     * متد جدید و بهبودیافته برای استخراج تصاویر به ترتیب بصری.
-     * این متد از یک موتور پردازش استریم برای تضمین ترتیب صحیح استفاده می‌کند.
-     */
     private void extractImagesInOrder(final Result result) {
         new Thread(() -> {
             final Handler handler = new Handler(Looper.getMainLooper());
             try {
-                PDDocument document = null;
+                PDDocument document;
                 if (filePath != null) {
                     document = PDDocument.load(new File(filePath));
                 } else if (pdfData != null) {
@@ -326,11 +302,9 @@ public class FlutterPDFView implements PlatformView, MethodCallHandler {
     }
 }
 
-/**
- * یک موتور پردازش استریم سفارشی برای استخراج تصاویر به ترتیب رندر شدن.
- */
 class ImageExtractor extends PDFStreamEngine {
     private final List<Map<String, String>> imagesData;
+    private final List<String> processedImageHashes = new ArrayList<>();
 
     ImageExtractor(List<Map<String, String>> imagesData) {
         this.imagesData = imagesData;
@@ -350,28 +324,21 @@ class ImageExtractor extends PDFStreamEngine {
                 byte[] imageBytes = IOUtils.toByteArray(rawBytesStream);
                 rawBytesStream.close();
                 
+                String imageHash = Base64.encodeToString(imageBytes, Base64.NO_WRAP);
+                if (processedImageHashes.contains(imageHash)) {
+                    return;
+                }
+                processedImageHashes.add(imageHash);
+                
                 String format = image.getSuffix();
                 if (format == null) {
-                    format = "unknown";
+                    format = "jpg"; // Fallback to a common format
                 }
 
                 Map<String, String> imageData = new HashMap<>();
                 imageData.put("format", format);
-                imageData.put("data", Base64.encodeToString(imageBytes, Base64.DEFAULT));
-                
-                // جلوگیری از افزودن تصاویر تکراری (برخی PDFها یک تصویر را چند بار ارجاع می‌دهند)
-                // این کار با مقایسه هش داده‌های تصویر انجام می‌شود تا از تکرار جلوگیری شود.
-                // برای سادگی در اینجا، ما فقط بر اساس داده‌های base64 چک می‌کنیم.
-                boolean alreadyExists = false;
-                for(Map<String, String> existingImage : imagesData) {
-                    if(existingImage.get("data").equals(imageData.get("data"))) {
-                        alreadyExists = true;
-                        break;
-                    }
-                }
-                if(!alreadyExists) {
-                    imagesData.add(imageData);
-                }
+                imageData.put("data", imageHash);
+                imagesData.add(imageData);
             }
         } else {
             super.processOperator(operator, operands);
