@@ -13,10 +13,8 @@ import com.github.barteksc.pdfviewer.listener.OnErrorListener;
 import com.github.barteksc.pdfviewer.listener.OnPageChangeListener;
 import com.github.barteksc.pdfviewer.listener.OnPageErrorListener;
 import com.github.barteksc.pdfviewer.listener.OnRenderListener;
-// import com.github.barteksc.pdfviewer.listener.OnScrollListener; // حذف شد: این کلاس در نسخه جدید کتابخانه وجود ندارد
 import com.github.barteksc.pdfviewer.util.FitPolicy;
 
-// --- وارد کردن تمام پکیج‌های لازم برای PDFBox ---
 import com.tom_roush.pdfbox.android.PDFBoxResourceLoader;
 import com.tom_roush.pdfbox.contentstream.PDFStreamEngine;
 import com.tom_roush.pdfbox.contentstream.operator.Operator;
@@ -28,6 +26,7 @@ import com.tom_roush.pdfbox.pdmodel.PDPage;
 import com.tom_roush.pdfbox.pdmodel.PDResources;
 import com.tom_roush.pdfbox.pdmodel.graphics.PDXObject;
 import com.tom_roush.pdfbox.pdmodel.graphics.image.PDImageXObject;
+
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
@@ -56,7 +55,6 @@ public class FlutterPDFView implements PlatformView, MethodCallHandler {
         this.context = context;
         pdfView = new PDFView(context, null);
 
-        // این خط برای عملکرد صحیح PDFBox ضروری است
         PDFBoxResourceLoader.init(context);
 
         final boolean preventLinkNavigation = getBoolean(params, "preventLinkNavigation");
@@ -113,15 +111,11 @@ public class FlutterPDFView implements PlatformView, MethodCallHandler {
                         args.put("error", t.toString());
                         methodChannel.invokeMethod("onPageError", args);
                     })
-                    // --- اصلاح شد: امضای متد onRender در نسخه جدید تغییر کرده است ---
                     .onRender((pages) -> {
                         Map<String, Object> args = new HashMap<>();
                         args.put("pages", pages);
                         methodChannel.invokeMethod("onRender", args);
                     })
-                    // --- نکته: OnScrollListener در این نسخه از کتابخانه حذف شده است. ---
-                    // برای دریافت موقعیت اسکرول، می‌توانید از متد getPosition به صورت دوره‌ای استفاده کنید.
-                    // در حال حاضر راه مستقیمی برای گوش دادن به رویداد اسکرول وجود ندارد.
                     .load();
         }
     }
@@ -248,7 +242,6 @@ public class FlutterPDFView implements PlatformView, MethodCallHandler {
                     ((PDFLinkHandler) this.linkHandler).setPreventLinkNavigation(getBoolean(settings, key));
                     break;
                 default:
-                    // کلیدهای دیگر در حال حاضر قابل به‌روزرسانی نیستند.
                     break;
             }
         }
@@ -293,7 +286,6 @@ public class FlutterPDFView implements PlatformView, MethodCallHandler {
     }
 }
 
-// این کلاس به دلیل تعریف وابستگی‌ها در build.gradle جدید، اکنون به درستی کامپایل می‌شود
 class ImageExtractor extends PDFStreamEngine {
     private final List<Map<String, String>> imagesData;
     private final List<String> processedImageHashes = new ArrayList<>();
@@ -310,18 +302,20 @@ class ImageExtractor extends PDFStreamEngine {
 
             if (xobject instanceof PDImageXObject) {
                 PDImageXObject image = (PDImageXObject) xobject;
-                InputStream rawBytesStream = image.getStream().getUnfilteredStream();
+                
+                InputStream rawBytesStream = image.getStream().createInputStream();
                 byte[] imageBytes = IOUtils.toByteArray(rawBytesStream);
                 rawBytesStream.close();
                 
                 String imageHash = Base64.encodeToString(imageBytes, Base64.NO_WRAP);
                 if (processedImageHashes.contains(imageHash)) {
-                    return; // از پردازش تصاویر تکراری جلوگیری می‌کند
+                    return;
                 }
                 processedImageHashes.add(imageHash);
+                
                 String format = image.getSuffix();
                 if (format == null) {
-                    format = "jpg"; // یک فرمت پیش‌فرض در صورت نبودن پسوند
+                    format = "jpg";
                 }
 
                 Map<String, String> imageData = new HashMap<>();
