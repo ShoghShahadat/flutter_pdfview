@@ -2,7 +2,7 @@ name: flutter_pdfview
 description: A Flutter plugin that provides a PDFView widget on Android and iOS.
 # نسخه برای انعکاس قابلیت‌های جدید و تغییرات معماری افزایش یافت
 version: 3.0.0
-homepage: https://github.com/endigo/flutter_pdfview
+homepage: https://github.com/ShoghShahadat/flutter_pdfview
 
 environment:
   sdk: ">=2.17.0 <4.0.0"
