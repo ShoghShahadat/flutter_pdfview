@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/gestures.dart';
@@ -12,6 +13,27 @@ typedef PageChangedCallback = void Function(int? page, int? total);
 typedef ErrorCallback = void Function(dynamic error);
 typedef PageErrorCallback = void Function(int? page, dynamic error);
 typedef LinkHandlerCallback = void Function(String? uri);
+typedef ScrollChangedCallback = void Function(double? x, double? y);
+
+/// قابلیت جدید: یک کلاس مدل برای نگهداری داده‌های تصویر استخراج شده.
+/// این کلاس شامل فرمت اصلی تصویر و داده‌های Base64 آن است.
+class PDFImage {
+  final String format;
+  final String base64Data;
+
+  PDFImage({required this.format, required this.base64Data});
+
+  factory PDFImage.fromMap(Map<dynamic, dynamic> map) {
+    return PDFImage(
+      format: map['format'] ?? 'unknown',
+      base64Data: map['data'] ?? '',
+    );
+  }
+
+  /// یک متد کمکی برای نمایش آسان تصویر با ویجت Image.
+  /// مثال: Image.memory(pdfImage.bytes)
+  Uint8List get bytes => base64Decode(base64Data);
+}
 
 enum FitPolicy { WIDTH, HEIGHT, BOTH }
 
@@ -26,6 +48,7 @@ class PDFView extends StatefulWidget {
     this.onError,
     this.onPageError,
     this.onLinkHandler,
+    this.onScroll,
     this.gestureRecognizers,
     this.enableSwipe = true,
     this.swipeHorizontal = false,
@@ -45,79 +68,28 @@ class PDFView extends StatefulWidget {
   @override
   _PDFViewState createState() => _PDFViewState();
 
-  /// If not null invoked once the PDFView is created.
   final PDFViewCreatedCallback? onViewCreated;
-
-  /// Return PDF page count as a parameter
   final RenderCallback? onRender;
-
-  /// Return current page and page count as a parameter
   final PageChangedCallback? onPageChanged;
-
-  /// Invokes on error that handled on native code
   final ErrorCallback? onError;
-
-  /// Invokes on page cannot be rendered or something happens
   final PageErrorCallback? onPageError;
-
-  /// Used with preventLinkNavigation=true. It's helpful to customize link navigation
   final LinkHandlerCallback? onLinkHandler;
-
-  /// Which gestures should be consumed by the pdf view.
-  ///
-  /// It is possible for other gesture recognizers to be competing with the pdf view on pointer
-  /// events, e.g if the pdf view is inside a [ListView] the [ListView] will want to handle
-  /// vertical drags. The pdf view will claim gestures that are recognized by any of the
-  /// recognizers on this list.
-  ///
-  /// When this set is empty or null, the pdf view will only handle pointer events for gestures that
-  /// were not claimed by any other gesture recognizer.
+  final ScrollChangedCallback? onScroll;
   final Set<Factory<OneSequenceGestureRecognizer>>? gestureRecognizers;
-
-  /// The initial URL to load.
   final String? filePath;
-
-  /// The binary data of a PDF document
   final Uint8List? pdfData;
-
-  /// Indicates whether or not the user can swipe to change pages in the PDF document. If set to true, swiping is enabled.
   final bool enableSwipe;
-
-  /// Indicates whether or not the user can swipe horizontally to change pages in the PDF document. If set to true, horizontal swiping is enabled.
   final bool swipeHorizontal;
-
-  /// Represents the password for a password-protected PDF document. It can be nullable
   final String? password;
-
-  /// Indicates whether or not the PDF viewer is in night mode. If set to true, the viewer is in night mode
   final bool nightMode;
-
-  /// Indicates whether or not the PDF viewer automatically adds spacing between pages. If set to true, spacing is added.
   final bool autoSpacing;
-
-  /// Indicates whether or not the user can "fling" pages in the PDF document. If set to true, page flinging is enabled.
   final bool pageFling;
-
-  /// Indicates whether or not the viewer snaps to a page after the user has scrolled to it. If set to true, snapping is enabled.
   final bool pageSnap;
-
-  /// Represents the default page to display when the PDF document is loaded.
   final int defaultPage;
-
-  /// FitPolicy that determines how the PDF pages are fit to the screen. The FitPolicy enum can take on the following values:
-  /// - FitPolicy.WIDTH: The PDF pages are scaled to fit the width of the screen.
-  /// - FitPolicy.HEIGHT: The PDF pages are scaled to fit the height of the screen.
-  /// - FitPolicy.BOTH: The PDF pages are scaled to fit both the width and height of the screen.
   final FitPolicy fitPolicy;
-
-  /// fitEachPage
   @Deprecated("will be removed next version")
   final bool fitEachPage;
-
-  /// Indicates whether or not clicking on links in the PDF document will open the link in a new page. If set to true, link navigation is prevented.
   final bool preventLinkNavigation;
-
-  /// Use to change the background color. ex : "#FF0000" => red
   final Color? backgroundColor;
 }
 
@@ -209,7 +181,6 @@ class _CreationParams {
 
   final String? filePath;
   final Uint8List? pdfData;
-
   final _PDFViewSettings? settings;
 
   Map<String, dynamic> toMap() {
@@ -217,9 +188,7 @@ class _CreationParams {
       'filePath': filePath,
       'pdfData': pdfData,
     };
-
     params.addAll(settings!.toMap());
-
     return params;
   }
 }
@@ -237,6 +206,7 @@ class _PDFViewSettings {
     this.fitPolicy,
     this.preventLinkNavigation,
     this.backgroundColor,
+    this.onScroll,
   });
 
   static _PDFViewSettings fromWidget(PDFView widget) {
@@ -252,6 +222,7 @@ class _PDFViewSettings {
       fitPolicy: widget.fitPolicy,
       preventLinkNavigation: widget.preventLinkNavigation,
       backgroundColor: widget.backgroundColor,
+      onScroll: widget.onScroll,
     );
   }
 
@@ -265,8 +236,8 @@ class _PDFViewSettings {
   final int? defaultPage;
   final FitPolicy? fitPolicy;
   final bool? preventLinkNavigation;
-
   final Color? backgroundColor;
+  final ScrollChangedCallback? onScroll;
 
   Map<String, dynamic> toMap() {
     return <String, dynamic>{
@@ -281,6 +252,7 @@ class _PDFViewSettings {
       'fitPolicy': fitPolicy.toString(),
       'preventLinkNavigation': preventLinkNavigation,
       'backgroundColor': backgroundColor?.value,
+      'onScroll': onScroll != null,
     };
   }
 
@@ -317,10 +289,8 @@ class PDFViewController {
     _widget = null;
   }
 
-  MethodChannel _channel;
-
+  final MethodChannel _channel;
   late _PDFViewSettings _settings;
-
   PDFView? _widget;
 
   Future<bool?> _onMethodCall(MethodCall call) async {
@@ -347,6 +317,12 @@ class PDFViewController {
       case 'onLinkHandler':
         widget.onLinkHandler?.call(call.arguments);
         return null;
+      case 'onScroll':
+        widget.onScroll?.call(
+          call.arguments['x'],
+          call.arguments['y'],
+        );
+        return null;
     }
     throw MissingPluginException(
         '${call.method} was invoked but has no handler');
@@ -368,6 +344,30 @@ class PDFViewController {
       'page': page,
     });
     return isSet;
+  }
+
+  Future<Map<String, double>?> getPosition() async {
+    final Map<dynamic, dynamic>? position =
+        await _channel.invokeMethod('getPosition');
+    return position?.cast<String, double>();
+  }
+
+  Future<bool?> setPosition(double x, double y) async {
+    return _channel.invokeMethod('setPosition', <String, dynamic>{
+      'x': x,
+      'y': y,
+    });
+  }
+
+  /// قابلیت بهبودیافته: تمام تصاویر را به همراه فرمت اصلی آن‌ها استخراج می‌کند.
+  /// خروجی لیستی از اشیاء `PDFImage` است.
+  Future<List<PDFImage>?> extractImages() async {
+    final List<dynamic>? imagesData =
+        await _channel.invokeMethod('extractImages');
+    if (imagesData == null) {
+      return null;
+    }
+    return imagesData.map((imageData) => PDFImage.fromMap(imageData)).toList();
   }
 
   Future<void> _updateWidget(PDFView widget) async {

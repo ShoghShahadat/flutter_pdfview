@@ -1,9 +1,37 @@
 package io.endigo.plugins.pdfviewflutter;
 
 import android.content.Context;
-import android.graphics.Color;
-import android.view.View;
 import android.net.Uri;
+import android.os.Handler;
+import android.os.Looper;
+import android.util.Base64;
+import android.view.View;
+
+import com.github.barteksc.pdfviewer.PDFView;
+import com.github.barteksc.pdfviewer.link.LinkHandler;
+import com.github.barteksc.pdfviewer.listener.OnErrorListener;
+import com.github.barteksc.pdfviewer.listener.OnPageChangeListener;
+import com.github.barteksc.pdfviewer.listener.OnPageErrorListener;
+import com.github.barteksc.pdfviewer.listener.OnRenderListener;
+import com.github.barteksc.pdfviewer.util.FitPolicy;
+import com.tom_roush.pdfbox.contentstream.PDFStreamEngine;
+import com.tom_roush.pdfbox.contentstream.operator.Operator;
+import com.tom_roush.pdfbox.cos.COSBase;
+import com.tom_roush.pdfbox.cos.COSName;
+import com.tom_roush.pdfbox.io.IOUtils;
+import com.tom_roush.pdfbox.pdmodel.PDDocument;
+import com.tom_roush.pdfbox.pdmodel.PDPage;
+import com.tom_roush.pdfbox.pdmodel.graphics.PDXObject;
+import com.tom_roush.pdfbox.pdmodel.graphics.image.PDImageXObject;
+import com.tom_roush.pdfbox.util.PDFBoxResourceLoader;
+
+import java.io.File;
+import java.io.IOException;
+import java.io.InputStream;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 
 import io.flutter.plugin.common.BinaryMessenger;
 import io.flutter.plugin.common.MethodCall;
@@ -12,26 +40,22 @@ import io.flutter.plugin.common.MethodChannel.MethodCallHandler;
 import io.flutter.plugin.common.MethodChannel.Result;
 import io.flutter.plugin.platform.PlatformView;
 
-import java.io.File;
-import java.util.HashMap;
-import java.util.Map;
-
-import com.github.barteksc.pdfviewer.PDFView;
-import com.github.barteksc.pdfviewer.PDFView.Configurator;
-import com.github.barteksc.pdfviewer.listener.*;
-import com.github.barteksc.pdfviewer.util.Constants;
-import com.github.barteksc.pdfviewer.util.FitPolicy;
-
-import com.github.barteksc.pdfviewer.link.LinkHandler;
-
 public class FlutterPDFView implements PlatformView, MethodCallHandler {
     private final PDFView pdfView;
     private final MethodChannel methodChannel;
     private final LinkHandler linkHandler;
+    private final Context context;
+
+    private String filePath;
+    private byte[] pdfData;
 
     @SuppressWarnings("unchecked")
     FlutterPDFView(Context context, BinaryMessenger messenger, int id, Map<String, Object> params) {
+        this.context = context;
         pdfView = new PDFView(context, null);
+        
+        PDFBoxResourceLoader.init(context);
+
         final boolean preventLinkNavigation = getBoolean(params, "preventLinkNavigation");
 
         methodChannel = new MethodChannel(messenger, "plugins.endigo.io/pdfview_" + id);
@@ -39,13 +63,15 @@ public class FlutterPDFView implements PlatformView, MethodCallHandler {
 
         linkHandler = new PDFLinkHandler(context, pdfView, methodChannel, preventLinkNavigation);
 
-        Configurator config = null;
+        PDFView.Configurator config = null;
         if (params.get("filePath") != null) {
-            String filePath = (String) params.get("filePath");
-            config = pdfView.fromUri(getURI(filePath));
+            this.filePath = (String) params.get("filePath");
+            this.pdfData = null;
+            config = pdfView.fromUri(getURI(this.filePath));
         } else if (params.get("pdfData") != null) {
-            byte[] data = (byte[]) params.get("pdfData");
-            config = pdfView.fromBytes(data);
+            this.pdfData = (byte[]) params.get("pdfData");
+            this.filePath = null;
+            config = pdfView.fromBytes(this.pdfData);
         }
 
         Object backgroundColor = params.get("backgroundColor");
@@ -68,38 +94,60 @@ public class FlutterPDFView implements PlatformView, MethodCallHandler {
                     .linkHandler(linkHandler)
                     .enableAntialiasing(false)
                     .enableDoubletap(true)
-                    // .fitEachPage(getBoolean(params,"fitEachPage"))
                     .defaultPage(getInt(params, "defaultPage"))
-                    .onPageChange(new OnPageChangeListener() {
-                        @Override
-                        public void onPageChanged(int page, int total) {
-                            Map<String, Object> args = new HashMap<>();
-                            args.put("page", page);
-                            args.put("total", total);
-                            methodChannel.invokeMethod("onPageChanged", args);
-                        }
+                    .onPageChange((page, total) -> {
+                        Map<String, Object> args = new HashMap<>();
+                        args.put("page", page);
+                        args.put("total", total);
+                        methodChannel.invokeMethod("onPageChanged", args);
                     })
-                    .onError(new OnErrorListener() {
+                    .onError(t -> {
+                        Map<String, Object> args = new HashMap<>();
+                        args.put("error", t.toString());
+                        methodChannel.invokeMethod("onError", args);
+                    }).onPageError((page, t) -> {
+                        Map<String, Object> args = new HashMap<>();
+                        args.put("page", page);
+                        args.put("error", t.toString());
+                        methodChannel.invokeMethod("onPageError", args);
+                    }).onRender((pages, pageWidth, pageHeight) -> {
+                        Map<String, Object> args = new HashMap<>();
+                        args.put("pages", pages);
+                        methodChannel.invokeMethod("onRender", args);
+                    })
+                    .onScrollHandle(new com.github.barteksc.pdfviewer.scroll.ScrollHandle() {
                         @Override
-                        public void onError(Throwable t) {
-                            Map<String, Object> args = new HashMap<>();
-                            args.put("error", t.toString());
-                            methodChannel.invokeMethod("onError", args);
+                        public void setScroll(float position) {}
+
+                        @Override
+                        public void setupLayout(PDFView pdfView) {}
+
+                        @Override
+                        public void destroyLayout() {}
+
+                        @Override
+                        public void setPageNum(int pageNum) {}
+
+                        @Override
+                        public boolean isVisible() {
+                            return false;
                         }
-                    }).onPageError(new OnPageErrorListener() {
+
                         @Override
-                        public void onPageError(int page, Throwable t) {
-                            Map<String, Object> args = new HashMap<>();
-                            args.put("page", page);
-                            args.put("error", t.toString());
-                            methodChannel.invokeMethod("onPageError", args);
-                        }
-                    }).onRender(new OnRenderListener() {
+                        public void hideDelayed() {}
+
                         @Override
-                        public void onInitiallyRendered(int pages) {
-                            Map<String, Object> args = new HashMap<>();
-                            args.put("pages", pages);
-                            methodChannel.invokeMethod("onRender", args);
+                        public void show() {}
+
+                        @Override
+                        public void hide() {}
+                        
+                        @Override
+                        public void onScroll(float x, float y){
+                             Map<String, Object> args = new HashMap<>();
+                             args.put("x", (double) x);
+                             args.put("y", (double) y);
+                             methodChannel.invokeMethod("onScroll", args);
                         }
                     })
                     .load();
@@ -123,6 +171,15 @@ public class FlutterPDFView implements PlatformView, MethodCallHandler {
             case "setPage":
                 setPage(methodCall, result);
                 break;
+            case "getPosition":
+                getPosition(result);
+                break;
+            case "setPosition":
+                setPosition(methodCall, result);
+                break;
+            case "extractImages":
+                extractImagesInOrder(result); // استفاده از متد جدید و دقیق
+                break;
             case "updateSettings":
                 updateSettings(methodCall, result);
                 break;
@@ -132,6 +189,7 @@ public class FlutterPDFView implements PlatformView, MethodCallHandler {
         }
     }
 
+    // ... (متدهای دیگر بدون تغییر باقی می‌مانند)
     void getPageCount(Result result) {
         result.success(pdfView.getPageCount());
     }
@@ -143,11 +201,61 @@ public class FlutterPDFView implements PlatformView, MethodCallHandler {
     void setPage(MethodCall call, Result result) {
         if (call.argument("page") != null) {
             int page = (int) call.argument("page");
-            pdfView.jumpTo(page);
+            pdfView.jumpTo(page, true);
         }
-
         result.success(true);
     }
+
+    void getPosition(Result result) {
+        Map<String, Double> position = new HashMap<>();
+        position.put("x", (double) pdfView.getCurrentXOffset());
+        position.put("y", (double) pdfView.getCurrentYOffset());
+        result.success(position);
+    }
+
+    void setPosition(MethodCall call, Result result) {
+        if (call.argument("x") != null && call.argument("y") != null) {
+            float x = ((Number) call.argument("x")).floatValue();
+            float y = ((Number) call.argument("y")).floatValue();
+            pdfView.moveTo(x, y, true);
+        }
+        result.success(true);
+    }
+    
+    /**
+     * متد جدید و بهبودیافته برای استخراج تصاویر به ترتیب بصری.
+     * این متد از یک موتور پردازش استریم برای تضمین ترتیب صحیح استفاده می‌کند.
+     */
+    private void extractImagesInOrder(final Result result) {
+        new Thread(() -> {
+            final Handler handler = new Handler(Looper.getMainLooper());
+            try {
+                PDDocument document = null;
+                if (filePath != null) {
+                    document = PDDocument.load(new File(filePath));
+                } else if (pdfData != null) {
+                    document = PDDocument.load(pdfData);
+                } else {
+                    handler.post(() -> result.error("NoSource", "PDF source not available.", null));
+                    return;
+                }
+
+                final List<Map<String, String>> imagesData = new ArrayList<>();
+                ImageExtractor extractor = new ImageExtractor(imagesData);
+
+                for (PDPage page : document.getPages()) {
+                    extractor.processPage(page);
+                }
+                document.close();
+
+                handler.post(() -> result.success(imagesData));
+
+            } catch (IOException e) {
+                handler.post(() -> result.error("ExtractionError", "Failed to extract images.", e.toString()));
+            }
+        }).start();
+    }
+
 
     @SuppressWarnings("unchecked")
     private void updateSettings(MethodCall methodCall, Result result) {
@@ -171,11 +279,10 @@ public class FlutterPDFView implements PlatformView, MethodCallHandler {
                     pdfView.setPageSnap(getBoolean(settings, key));
                     break;
                 case "preventLinkNavigation":
-                    final PDFLinkHandler plh = (PDFLinkHandler) this.linkHandler;
-                    plh.setPreventLinkNavigation(getBoolean(settings, key));
+                    ((PDFLinkHandler) this.linkHandler).setPreventLinkNavigation(getBoolean(settings, key));
                     break;
                 default:
-                    throw new IllegalArgumentException("Unknown PDFView setting: " + key);
+                    break;
             }
         }
     }
@@ -186,7 +293,7 @@ public class FlutterPDFView implements PlatformView, MethodCallHandler {
     }
 
     private boolean getBoolean(Map<String, Object> params, String key) {
-        return params.containsKey(key) ? (boolean) params.get(key) : false;
+        return params.containsKey(key) && (boolean) params.get(key);
     }
 
     private String getString(Map<String, Object> params, String key) {
@@ -212,11 +319,62 @@ public class FlutterPDFView implements PlatformView, MethodCallHandler {
 
     private Uri getURI(final String uri) {
         Uri parsed = Uri.parse(uri);
-
         if (parsed.getScheme() == null || parsed.getScheme().isEmpty()) {
             return Uri.fromFile(new File(uri));
         }
         return parsed;
     }
+}
 
+/**
+ * یک موتور پردازش استریم سفارشی برای استخراج تصاویر به ترتیب رندر شدن.
+ */
+class ImageExtractor extends PDFStreamEngine {
+    private final List<Map<String, String>> imagesData;
+
+    ImageExtractor(List<Map<String, String>> imagesData) {
+        this.imagesData = imagesData;
+    }
+
+    @Override
+    protected void processOperator(Operator operator, List<COSBase> operands) throws IOException {
+        String operation = operator.getName();
+        if ("Do".equals(operation)) {
+            COSName objectName = (COSName) operands.get(0);
+            PDXObject xobject = getResources().getXObject(objectName);
+
+            if (xobject instanceof PDImageXObject) {
+                PDImageXObject image = (PDImageXObject) xobject;
+                
+                InputStream rawBytesStream = image.getStream().getUnfilteredStream();
+                byte[] imageBytes = IOUtils.toByteArray(rawBytesStream);
+                rawBytesStream.close();
+                
+                String format = image.getSuffix();
+                if (format == null) {
+                    format = "unknown";
+                }
+
+                Map<String, String> imageData = new HashMap<>();
+                imageData.put("format", format);
+                imageData.put("data", Base64.encodeToString(imageBytes, Base64.DEFAULT));
+                
+                // جلوگیری از افزودن تصاویر تکراری (برخی PDFها یک تصویر را چند بار ارجاع می‌دهند)
+                // این کار با مقایسه هش داده‌های تصویر انجام می‌شود تا از تکرار جلوگیری شود.
+                // برای سادگی در اینجا، ما فقط بر اساس داده‌های base64 چک می‌کنیم.
+                boolean alreadyExists = false;
+                for(Map<String, String> existingImage : imagesData) {
+                    if(existingImage.get("data").equals(imageData.get("data"))) {
+                        alreadyExists = true;
+                        break;
+                    }
+                }
+                if(!alreadyExists) {
+                    imagesData.add(imageData);
+                }
+            }
+        } else {
+            super.processOperator(operator, operands);
+        }
+    }
 }
