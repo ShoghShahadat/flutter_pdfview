@@ -188,9 +188,20 @@ public class FlutterPDFView implements PlatformView, MethodCallHandler {
     }
     
     private void extractImagesInOrder(final Result result) {
+        extractImagesInternal(this.filePath, this.pdfData, this.context, result);
+    }
+
+    /**
+     * متد استاتیک جدید برای استخراج تصاویر که می‌تواند از هر جایی فراخوانی شود.
+     * این متد منطق اصلی را در خود جای داده و هم توسط نمونه ویجت و هم توسط کانال استاتیک پلاگین استفاده می‌شود.
+     */
+    public static void extractImagesInternal(final String filePath, final byte[] pdfData, Context context, final Result result) {
         new Thread(() -> {
             final Handler handler = new Handler(Looper.getMainLooper());
             try {
+                // اطمینان از اینکه PDFBox مقداردهی اولیه شده است
+                PDFBoxResourceLoader.init(context.getApplicationContext());
+                
                 PDDocument document;
                 if (filePath != null) {
                     document = PDDocument.load(new File(filePath));

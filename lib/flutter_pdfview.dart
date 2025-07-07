@@ -35,6 +35,77 @@ class PDFImage {
   Uint8List get bytes => base64Decode(base64Data);
 }
 
+/// قابلیت جدید: یک کلاس مدل برای نگهداری داده‌های تصویر بندانگشتی (Thumbnail).
+class PDFThumbnail {
+  final String base64Data;
+  final int width;
+  final int height;
+
+  PDFThumbnail({
+    required this.base64Data,
+    required this.width,
+    required this.height,
+  });
+
+  factory PDFThumbnail.fromMap(Map<dynamic, dynamic> map) {
+    return PDFThumbnail(
+      base64Data: map['data'] ?? '',
+      width: map['width'] ?? 0,
+      height: map['height'] ?? 0,
+    );
+  }
+
+  /// یک متد کمکی برای نمایش آسان تصویر با ویجت Image.
+  /// مثال: Image.memory(pdfThumbnail.bytes)
+  Uint8List get bytes => base64Decode(base64Data);
+}
+
+/// قابلیت جدید: کلاسی برای ارائه ابزارهای استاتیک جهت کار با فایل‌های PDF
+/// بدون نیاز به ساخت ویجت.
+class PDFTools {
+  static const MethodChannel _channel =
+      MethodChannel('plugins.endigo.io/pdfview_tools');
+
+  /// تمام تصاویر را از یک فایل PDF استخراج می‌کند.
+  /// می‌توان مسیر فایل (`filePath`) یا داده‌های بایت (`pdfData`) را ارائه داد.
+  static Future<List<PDFImage>?> extractImages({
+    String? filePath,
+    Uint8List? pdfData,
+  }) async {
+    assert(filePath != null || pdfData != null);
+    final List<dynamic>? imagesData =
+        await _channel.invokeMethod('extractImages', {
+      'filePath': filePath,
+      'pdfData': pdfData,
+    });
+    if (imagesData == null) {
+      return null;
+    }
+    return imagesData.map((imageData) => PDFImage.fromMap(imageData)).toList();
+  }
+
+  /// یک تصویر بندانگشتی (Thumbnail) از صفحه اول PDF تولید می‌کند.
+  /// می‌توان مسیر فایل (`filePath`) یا داده‌های بایت (`pdfData`) را ارائه داد.
+  /// `quality` بین 0 تا 100 برای فشرده‌سازی تصویر است.
+  static Future<PDFThumbnail?> generateThumbnail({
+    String? filePath,
+    Uint8List? pdfData,
+    int quality = 100,
+  }) async {
+    assert(filePath != null || pdfData != null);
+    final Map<dynamic, dynamic>? imageData =
+        await _channel.invokeMethod('generateThumbnail', {
+      'filePath': filePath,
+      'pdfData': pdfData,
+      'quality': quality,
+    });
+    if (imageData == null) {
+      return null;
+    }
+    return PDFThumbnail.fromMap(imageData);
+  }
+}
+
 enum FitPolicy { WIDTH, HEIGHT, BOTH }
 
 class PDFView extends StatefulWidget {
@@ -360,7 +431,7 @@ class PDFViewController {
   }
 
   /// قابلیت بهبودیافته: تمام تصاویر را به همراه فرمت اصلی آن‌ها استخراج می‌کند.
-  /// خروجی لیستی از اشیاء `PDFImage` است.
+  /// این متد اکنون از طریق نمونه ویجت نیز قابل دسترسی است اما منطق آن به کد نیتیو مشترک منتقل شده.
   Future<List<PDFImage>?> extractImages() async {
     final List<dynamic>? imagesData =
         await _channel.invokeMethod('extractImages');
